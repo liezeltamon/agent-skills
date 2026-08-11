@@ -1,0 +1,6 @@
+interface:
+  display_name: "Commit Local Changes"
+  short_description: "Plan and create atomic local Git commits"
+  default_prompt: "Use $commit-local-changes to inspect my working tree, propose atomic commits, and commit only after I approve the full plan."
+policy:
+  allow_implicit_invocation: true
