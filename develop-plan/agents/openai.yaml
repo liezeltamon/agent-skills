@@ -1,0 +1,6 @@
+interface:
+  display_name: "Develop Plan"
+  short_description: "Discuss work before drafting or implementing"
+  default_prompt: "Use $develop-plan to discuss this work without drafting a plan or implementing changes until I explicitly ask."
+policy:
+  allow_implicit_invocation: false
