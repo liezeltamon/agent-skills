@@ -6,6 +6,10 @@ Reusable, platform-neutral skills for coding and research agents.
 
 - `commit-local-changes`: inspect a complete Git working tree, propose atomic
   Conventional Commits, and create local commits only after explicit approval.
+- `develop-plan`: discuss and investigate work without automatically drafting,
+  revising, or implementing a plan.
+- `write-explained-code`: write new code with concise comments explaining each
+  meaningful operation's contextual purpose.
 
 ## Local discovery
 
@@ -17,5 +21,8 @@ mkdir -p "$HOME/.agents/skills"
 ln -s /path/to/agent-skills/commit-local-changes \
   "$HOME/.agents/skills/commit-local-changes"
 ```
+
+Replace `commit-local-changes` with the name of any other skill in this
+repository when linking it.
 
 Keep project-specific skills in the project's `.agents/skills` directory.
