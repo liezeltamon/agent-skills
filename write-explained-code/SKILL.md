@@ -5,77 +5,120 @@ description: Write new or substantially rewritten code with concise contextual c
 
 # Write Explained Code
 
-Make code understandable in place. Apply these rules to code added or
-substantially rewritten during the task; do not annotate unrelated existing
-code unless the user asks.
+Apply these rules when adding new code or substantially editing existing code. Do not apply them to existing code that is only read, reviewed, or debugged.
 
-## No silent handling
+### General implementation rules
 
-Do not silently handle unexpected, unsupported, or unspecified cases. If
-handling such a case requires a choice that could alter observable behavior or
-materially affect the result, ask the user how to proceed. If the case is
-intentionally unsupported or cannot be resolved through clarification, surface
-it with an appropriate, clear error. Do not introduce implicit defaults,
-fallbacks, coercion, retries, exception suppression, or automatic recovery
-unless explicitly requested or required by the existing specification.
+##### No silent handling
 
-## Prefer simple execution flow
+Do not silently resolve unexpected, unsupported, or unspecified cases when the choice could materially affect the result or observable behavior. Ask the user when their intent is needed to make that choice. If a case is unsupported or cannot be resolved, fail clearly rather than hiding the problem.
 
-Prefer a simple, explicit top-to-bottom execution flow. Keep straightforward
-logic inline by default, especially in one-off analysis scripts and launchers.
+Do not introduce implicit defaults, fallbacks, coercion, retries, exception suppression, or automatic recovery unless explicitly requested by the user.
 
-Extract a function only when it clearly improves at least one of the following:
+##### Prefer simple implementations
 
-- Reuse across multiple call sites.
-- Readability of otherwise complex logic.
-- Independent testing.
-- Separation of distinct responsibilities.
-- Isolation of complex branching or error handling.
+- Use the simplest clear implementation that meets the current requirements.
+- Keep the execution flow explicit and easy to follow from top to bottom,
+  especially in one-off analysis scripts and launchers.
+- Keep short, one-use logic inline. Extract a function when it clearly improves
+  reuse, readability, testing, separation of responsibility, or handling of
+  genuine complexity.
+- Avoid thin one-use helpers. Do not add classes, abstraction layers,
+  configuration, generalisation, or extension points for hypothetical future
+  needs.
+- Do not create auxiliary outputs beyond those required by the traceability
+  rules below unless the user requests them or they are clearly needed for
+  reproducibility, validation, or downstream use. Keep any such outputs minimal
+  and non-redundant.
+- Prefer the clearer implementation when both are practical at the expected
+  data scale. Add complexity for performance only when runtime or memory
+  benefits are meaningful.
 
-Avoid thin helper functions that are called once and merely rename a short,
-straightforward block. Do not introduce abstraction solely in anticipation of
-possible future reuse.
+##### Comment meaningful operations
 
-## Comment meaningful operations
+- Add concise comments above meaningful blocks of code.
+- Write comments so that reading only the section headings and block comments
+  is enough to understand the script's overall flow, major steps, and
+  progression from inputs to outputs.
+- Within each section, comment the meaningful intermediate steps needed to
+  follow how that section works. Do not rely on a single comment at the start
+  of a long section when several distinct operations occur within it.
+- Describe each block's purpose concisely, using concrete, plain language that
+  a reader unfamiliar with the workflow can understand. Name the actual data
+  objects and relationships, and avoid vague workflow terminology.
 
-- Use a cohesive conceptual step or code block as the default unit of
-  explanation. Add one concise comment immediately above each meaningful block,
-  using the language's native comment syntax.
-- Describe what the block accomplishes in the surrounding workflow and why it
-  is needed when that is not obvious. Include important assumptions or
-  consequences needed to understand the result; do not invent a rationale or
-  translate syntax into prose.
-- Do not comment on every line. When a block performs multiple distinct tasks,
-  prefer splitting it into clearly named intermediate operations and comment
-  each task separately. If the tasks must remain in one block, add internal
-  comments only at the boundaries between the distinct subtasks. Do not add
-  comments to blank, continuation-only, formatting-only, or closing-delimiter
-  lines.
+  For example, avoid:
+
+  `# Resolve paired inputs and validate their metadata contracts.`
+
+  Prefer:
+
+  `# Load the raw and transformed feature tables with their metadata. Require`
+  `# every sample in each table to appear in its corresponding metadata.`
+- Include assumptions, decisions, or consequences when they help explain
+  interpretation or why a step is necessary.
+- Group closely related statements under a single comment. Avoid redundant
+  comments that merely translate obvious code into prose.
 - Use module and function docstrings for overall purpose, inputs, outputs, and
-  terminology. Use inline comments for key implementation steps.
+  important terminology.
 - Preserve relevant comments supplied by the user.
 
 For example:
 
-```r
-# Assemble one ordered table so diagnostics remain aligned with PC order.
-model_diagnostics_df <- dplyr::bind_rows(model_diagnostic_rows)
+```python
+# %% Validate runs before combining them
+
+# Require one run per analysis configuration so no configuration receives
+# extra weight in the pooled result.
+duplicate_runs = run_parameters_df.duplicated(configuration_columns, keep=False)
+if duplicate_runs.any():
+    raise ValueError("Duplicate analysis configurations found.")
+
+# Hold the remaining analysis settings constant so the combined runs differ
+# only in the parameters being compared.
+for column in fixed_parameter_columns:
+    if run_parameters_df[column].nunique(dropna=False) != 1:
+        raise ValueError(f"Runs use multiple values of {column}.")
 ```
 
 ```python
-# Fit once so dynamic-programming subproblems can be reused across values of K.
-dynamic_program = rpt.Dynp(
-    model=cost_model,
-    min_size=min_segment_size,
-    jump=1,
-).fit(signal)
+# %% Summarise stability
 
-# Find the optimal changepoint locations for every feasible changepoint count.
-for k in range(max_changepoints + 1):
-    breakpoints = dynamic_program.predict(n_bkps=k)
+# Count each feature once per resample before calculating how often it recurs
+# across data perturbations.
+feature_counts_df = (
+    resample_results_df.groupby("feature", as_index=False)
+    .agg(n_selected_resamples=("resample_id", "nunique"))
+)
+
+# Use every successful resample as the denominator so absence from a resample
+# contributes to the reported selection frequency.
+feature_counts_df["selection_frequency"] = (
+    feature_counts_df["n_selected_resamples"] / n_successful_resamples
+)
 ```
 
-## Structure R and Python analysis scripts
+Avoid comments that merely repeat the syntax:
+
+```python
+# Group by feature.
+feature_groups = results_df.groupby("feature")
+```
+
+Prefer comments that explain the operation's role in the workflow:
+
+```python
+# Combine observations for each feature before calculating stability across
+# resamples.
+feature_groups = results_df.groupby("feature")
+```
+
+### Analysis-script and output conventions
+
+Apply these sections when creating or substantially editing analysis scripts
+or code that generates result files.
+
+##### Structure R and Python analysis scripts
 
 - Use `# %%` cell headings to organize new or substantially rewritten R and
   Python analysis scripts. Begin with a concise description of the script's
@@ -111,7 +154,37 @@ for k in range(max_changepoints + 1):
 - Adapt the main-section names to the actual workflow; the example names are
   illustrative rather than mandatory.
 
-## Anchor repository Python scripts
+##### Make generated results traceable to their code
+
+- For each generated results directory, if requested by user, save a machine-readable
+  `run_metadata.json` containing the input paths, parameter values actually used
+  including defaults, and inputs selected through patterns or filters. Do not
+  record credentials.
+- Name results directories after the generating script using its basename
+  without the extension. When the same script serves multiple analyses,
+  contrasts, or datasets, place those identifiers beneath the script-named
+  directory.
+- When the directory already provides the run context, keep filenames generic
+  rather than repeating the same identifiers.
+- For each plot, save one `<plot_stem>_plot_data.csv` containing the final data
+  needed to recreate or revise the plot without rerunning the upstream analysis,
+  for example when preparing the figure for publication.
+- Preserve rows excluded only by display filters in the plot-data CSV and record
+  those filters with clearly named boolean flags, including `included_in_plot`.
+  If a display filter changes a derived metric, retain both the complete-data
+  and plot-specific values.
+- Include concise explanatory text in each plot so it can be fully understood
+  and interpreted without consulting the code. Add only the contextual details
+  needed to interpret the figure correctly, such as the metric, transformation,
+  thresholds, or non-obvious encodings.
+- Preserve user-specified paths and existing external path contracts instead of
+  overriding them with these defaults.
+
+### Language-specific conventions
+
+Apply only the subsection relevant to the language and type of code being edited.
+
+##### Anchor Python relative paths to the repository root
 
 - For repository-bound Python scripts that use relative paths, import `os` and
   `subprocess`, then set the working directory to the Git repository root
@@ -130,7 +203,7 @@ os.chdir(
 - Do not add process-wide working-directory changes to importable library
   modules unless the user explicitly requests them.
 
-## R style
+##### R style
 
 - Follow the [tidyverse style guide](https://style.tidyverse.org) for R code
   by default.
@@ -147,56 +220,3 @@ os.chdir(
 - This parameter-assignment convention applies only to R. Do not add an
   analogous convention or explanatory note to Python or other languages; use
   their normal assignment style.
-
-## Make generated results traceable to their code
-
-- Whenever code generates outputs, save a machine-readable `run_metadata.json`
-  in the same output directory. Its purpose is to record everything needed to
-  rerun the analysis and reproduce the results: all input paths, parameter
-  values actually used, including defaults, and any inputs selected through
-  patterns or filters. Do not record passwords, access tokens, API keys, or
-  other credentials.
-- Name a generated results directory after the script that creates it, using
-  the script basename without its extension.
-- Place analysis-, contrast-, or dataset-specific identifiers beneath that
-  script-named directory when multiple runs share the same engine. For example,
-  `results/figures/prepare_module_ora_inputs/<analysis>` traces back to
-  `prepare_module_ora_inputs.R`.
-- Apply the same convention when a figure-specific launcher calls a generic
-  engine: use the generating engine's basename for the results directory and
-  retain the figure or analysis identity in the enclosing path or child name.
-- When the output directory already identifies the analysis, contrast,
-  dataset, or input, keep filenames within it generic. Do not hard-code or
-  repeat that identifier in every filename; the directory provides the run
-  context while generic filenames allow the same script to serve other inputs.
-- Whenever code generates a plot, also write a CSV containing the final
-  plot-ready data needed to recreate it directly without rerunning upstream
-  transformations, aggregation, normalization, ordering, or other analysis.
-  Include derived values and ordering or coordinate fields that affect the
-  rendering. Name the CSV from the plot stem with the suffix `_plot_data.csv`;
-  for example, `summary.pdf` or `summary.svg` uses `summary_plot_data.csv`.
-  Multiple formats of the same plot share one companion CSV.
-- Do not remove rows from a saved plot-data CSV solely because a display
-  filter controls which elements are shown in the current plot. Save the
-  complete pre-display-filter universe, add one clearly named boolean for each
-  display filter plus an overall `included_in_plot` flag, and apply those flags
-  only to the in-memory data passed to the plotting layer. This rule concerns
-  display choices; an analysis-defining cohort, quality-control exclusion, or
-  other scientific eligibility rule remains part of the analysis when the
-  user specifies it as such.
-- When a display filter changes an aggregation, normalization denominator,
-  ranking, ordering, or another derived value, retain both the complete-data
-  metric and the exact plot-specific metric in the unfiltered plot-data CSV.
-  The CSV must contain enough information to reproduce the current rendering
-  and to revise display filters later without recovering deleted rows.
-- Whenever code generates a plot, include compact interpretation text in the
-  plot itself. State the analysis decisions and contextual details a reader
-  needs to interpret the figure without consulting the source code, such as
-  the observation unit, metric definition, transformations or normalization,
-  inclusion thresholds, missing-data or empty-category behavior, and
-  non-obvious aesthetic encodings. Use a small subtitle or caption and split
-  long text across multiple lines so it does not crowd the plotting area.
-- Update launchers, downstream consumers, and documentation together whenever
-  an output path changes.
-- Preserve a user-specified path or established external output contract when
-  it takes precedence over this default convention.
